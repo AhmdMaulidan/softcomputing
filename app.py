@@ -3,6 +3,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 import json
+import genetic_knapsack
 
 app = Flask(__name__)
 
@@ -34,6 +35,13 @@ PROJECTS = [
         'thumbnail': 'uploads/thumnail-fuzzy.png',
         'description': 'Alat interaktif untuk menghitung logika fuzzy.',
         'endpoint': 'sugeno_calculator'
+    },
+    {
+        'id': 'knapsack-ga',
+        'title': 'Algoritma Genetika Knapsack',
+        'thumbnail': '',  # Anda bisa menambahkan gambar thumbnail jika mau
+        'description': 'Menemukan solusi optimal untuk masalah Knapsack menggunakan Algoritma Genetika.',
+        'endpoint': 'knapsack_calculator'
     }
 ]
 
@@ -67,6 +75,44 @@ def project():
         p['link_url'] = url_for(p['endpoint'])
     return render_template('project.html', show_sidebar=True, projects=PROJECTS,
                            sidebar_items=PROJECTS, sidebar_title='Project', active_nav='project')
+
+@app.route('/knapsack_calculator', methods=['GET', 'POST'])
+def knapsack_calculator():
+    result = None
+    error = None
+    if request.method == 'POST':
+        try:
+            max_weight = float(request.form['max_weight'])
+            items_json = request.form.get('items_json', '[]')
+            user_items = json.loads(items_json)
+
+            if not user_items:
+                raise ValueError("Tidak ada item yang ditambahkan.")
+
+            items = [genetic_knapsack.Item(i['name'], i['weight'], i['value']) for i in user_items]
+            
+            # Panggil solver dari genetic_knapsack.py
+            solution = genetic_knapsack.solve(items, max_weight)
+            
+            # Konversi item result kembali ke dict agar mudah di-render
+            solution['selected_items'] = [
+                {'name': item.name, 'weight': item.weight, 'value': item.value} 
+                for item in solution['selected_items']
+            ]
+            result = solution
+
+        except (ValueError, KeyError, json.JSONDecodeError) as e:
+            error = f"Input tidak valid atau format item salah. Harap periksa kembali. Error: {e}"
+        except Exception as e:
+            error = f"Terjadi kesalahan tak terduga: {e}"
+
+    for p in PROJECTS:
+        p['link_url'] = url_for(p['endpoint'])
+        
+    return render_template('knapsack_calculator.html', show_sidebar=True, 
+                           sidebar_items=PROJECTS, sidebar_title='Project', 
+                           active_nav='project', result=result, error=error, 
+                           form_data=request.form)
 
 @app.route('/sugeno_calculator', methods=['GET', 'POST'])
 def sugeno_calculator():

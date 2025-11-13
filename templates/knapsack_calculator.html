@@ -55,6 +55,14 @@
         padding: 0.5rem;
         border-radius: 4px;
     }
+    .chromosome-string {
+        font-family: monospace;
+        font-size: 1.1em;
+        letter-spacing: 2px;
+        background: var(--code-bg);
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
 </style>
 
 <div class="knapsack-calculator-layout">
@@ -87,9 +95,11 @@
                 <h5>Solusi Terbaik Ditemukan:</h5>
                 <p><strong>Total Nilai:</strong> {{ result.total_value }}</p>
                 <p><strong>Total Berat:</strong> {{ result.total_weight }} / {{ form_data.max_weight }}</p>
+                <p><strong>Total Item Dipilih:</strong> {{ result.selected_items|length }} dari {{ result.best_solution_chromosome|length }}</p>
+                <p><strong>Kromosom Terbaik:</strong> <span class="chromosome-string">{{ result.best_solution_chromosome | join('') }}</span></p>
             </div>
             <div class="result-container">
-                <h5>Item yang Dipilih:</h5>
+                <h5>Item yang Dipilih ({{ result.selected_items|length }} item):</h5>
                 <ul>
                     {% for item in result.selected_items %}
                         <li>{{ item.name }} (Berat: {{ item.weight }}, Nilai: {{ item.value }})</li>
