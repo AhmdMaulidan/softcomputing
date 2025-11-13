@@ -1,0 +1,302 @@
+{% extends 'base.html' %}
+
+{% block title %}Kalkulator Fuzzy Sugeno Dinamis{% endblock %}
+
+{% block header %}Kalkulator Logika Fuzzy - Metode Sugeno{% endblock %}
+
+{% block content %}
+<style>
+    .chart-container {
+        display: grid;
+        gap: 24px; /* Memberi jarak antar kurva */
+    }
+    .chart-container > div {
+        /* Batasi tinggi container chart agar tidak terlalu memanjang ke bawah */
+        height: 280px;
+        position: relative;
+    }
+</style>
+<div class="sugeno-calculator-layout">
+
+    <!-- Kolom Kiri: Input & Aturan -->
+    <div class="calculator-form-section">
+        <h4>1. Masukkan Nilai Input</h4>
+        <form method="POST" id="sugeno-form" class="calculator-form-vertical" action="{{ url_for('sugeno_calculator') }}">
+            <div class="form-group">
+                <label for="service">Kualitas Pelayanan (0-10)</label>
+                <input type="number" id="service" name="service" step="0.1" min="0" max="10" required value="{{ form_data.service if form_data else '' }}">
+            </div>
+            <div class="form-group">
+                <label for="food">Kualitas Makanan (0-10)</label>
+                <input type="number" id="food" name="food" step="0.1" min="0" max="10" required value="{{ form_data.food if form_data else '' }}">
+            </div>
+
+            <h4>2. Definisikan Aturan (Rules)</h4>
+            <div id="rule-builder"></div>
+            <button type="button" id="add-rule-btn" class="btn-secondary">+ Tambah Aturan</button>
+
+            <input type="hidden" name="rules_json" id="rules-json">
+            
+            <hr>
+            <button type="submit" class="calculate-btn btn-primary">Hitung Rekomendasi Tip</button>
+        </form>
+    </div>
+
+    <!-- Kolom Kanan: Hasil Perhitungan -->
+    <div class="calculator-results-section">
+        {% if error %}
+        <div class="error-container">
+            <h4>Terjadi Kesalahan:</h4>
+            <p class="error-text">{{ error }}</p>
+        </div>
+        {% endif %}
+
+        {% if calculation and calculation.rules %}
+        <div class="calculation-details">
+            <h3>Langkah-langkah Perhitungan:</h3>
+
+            <!-- Visualisasi Kurva -->
+            <div class="step-card">
+                <h4>Visualisasi Fuzzifikasi</h4>
+                <div class="chart-container">
+                    <div>
+                        <h5>Kualitas Pelayanan</h5>
+                        <canvas id="serviceChart"></canvas>
+                    </div>
+                    <div>
+                        <h5>Kualitas Makanan</h5>
+                        <canvas id="foodChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="step-card">
+                <h4>Fuzzifikasi Input</h4>
+                <p>Input: Pelayanan = <strong>{{ calculation.inputs.service }}</strong>, Makanan = <strong>{{ calculation.inputs.food }}</strong></p>
+                <div class="fuzz-results">
+                    <span>μ(Pelayanan='Buruk'): <strong>{{ '%.2f'|format(calculation.fuzzification.service.poor) }}</strong></span>
+                    <span>μ(Pelayanan='Baik'): <strong>{{ '%.2f'|format(calculation.fuzzification.service.good) }}</strong></span>
+                    <span>μ(Makanan='Tidak Enak'): <strong>{{ '%.2f'|format(calculation.fuzzification.food.poor) }}</strong></span>
+                    <span>μ(Makanan='Enak'): <strong>{{ '%.2f'|format(calculation.fuzzification.food.good) }}</strong></span>
+                </div>
+            </div>
+
+            <div class="step-card">
+                <h4>Inferensi Aturan</h4>
+                {% for rule in calculation.rules %}
+                <div class="rule-detail">
+                    <p><strong>{{ rule.name }}:</strong> {{ rule.text }}</p>
+                    <p class="rule-alpha-z">↳ α{{ loop.index }} = {{ '%.2f'|format(rule.alpha) }}; z{{ loop.index }} = {{ rule.z }}</p>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="step-card">
+                <h4>Defuzzifikasi (Weighted Average)</h4>
+                <p class="math-formula">Z = &Sigma;(αi * zi) / &Sigma;αi</p>
+                <p>Z = [ {% for rule in calculation.rules %}({{ '%.2f'|format(rule.alpha) }} * {{ rule.z }}){% if not loop.last %} + {% endif %}{% endfor %} ] / [ {% for rule in calculation.rules %}{{ '%.2f'|format(rule.alpha) }}{% if not loop.last %} + {% endif %}{% endfor %} ]</p>
+                <p>Z = {{ '%.2f'|format(calculation.defuzzification.numerator) }} / {{ '%.2f'|format(calculation.defuzzification.denominator) }}</p>
+            </div>
+            
+            <div class="result-container final-result">
+                <h4>Hasil Akhir Tip yang Direkomendasikan:</h4>
+                <p class="result-text">{{ '%.2f'|format(calculation.defuzzification.result) }}%</p>
+            </div>
+        </div>
+        {% elif request.method == 'POST' %}
+        <div class="info-container">
+             <h4>Hasil Tidak Ditemukan</h4>
+             <p>Perhitungan tidak dapat dilakukan. Pastikan Anda telah menambahkan setidaknya satu aturan (rule) sebelum menekan tombol hitung.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+// Logika pembuatan aturan (rule builder) tetap sama
+document.addEventListener('DOMContentLoaded', function() {
+    const ruleBuilder = document.getElementById('rule-builder');
+    const addRuleBtn = document.getElementById('add-rule-btn');
+    const form = document.getElementById('sugeno-form');
+    const rulesJsonInput = document.getElementById('rules-json');
+    let ruleCounter = 0;
+
+    function createRuleElement(ruleData = {}) {
+        const ruleId = ruleCounter++;
+        const ruleDiv = document.createElement('div');
+        ruleDiv.className = 'rule-item';
+        ruleDiv.id = `rule-${ruleId}`;
+
+        ruleDiv.innerHTML = `
+            <div class="rule-if">IF</div>
+            <div class="rule-segment">
+                <select name="var1" required>
+                    <option value="service" ${ruleData.var1 === 'service' ? 'selected' : ''}>Pelayanan</option>
+                    <option value="food" ${ruleData.var1 === 'food' ? 'selected' : ''}>Makanan</option>
+                </select>
+                <span>IS</span>
+                <select name="set1" required>
+                    <option value="poor" ${ruleData.set1 === 'poor' ? 'selected' : ''}>Buruk</option>
+                    <option value="good" ${ruleData.set1 === 'good' ? 'selected' : ''}>Baik</option>
+                </select>
+            </div>
+            <div class="rule-segment-op">
+                <select name="op">
+                    <option value="NONE" ${ruleData.op === 'NONE' ? 'selected' : ''}>-</option>
+                    <option value="AND" ${ruleData.op === 'AND' ? 'selected' : ''}>AND</option>
+                    <option value="OR" ${ruleData.op === 'OR' ? 'selected' : ''}>OR</option>
+                </select>
+            </div>
+            <div class="rule-segment-dynamic">
+                <select name="var2" class="var2-select">
+                    <option value="service" ${ruleData.var2 === 'service' ? 'selected' : ''}>Pelayanan</option>
+                    <option value="food" ${ruleData.var2 === 'food' ? 'selected' : ''}>Makanan</option>
+                </select>
+                <span>IS</span>
+                <select name="set2" class="set2-select">
+                    <option value="poor" ${ruleData.set2 === 'poor' ? 'selected' : ''}>Buruk</option>
+                    <option value="good" ${ruleData.set2 === 'good' ? 'selected' : ''}>Baik</option>
+                </select>
+            </div>
+            <div class="rule-then">THEN</div>
+            <div class="rule-segment-then">
+                <span>Tip = </span>
+                <input type="number" name="z" placeholder="e.g., 15" required value="${ruleData.z || ''}" step="0.1">
+                <span>%</span>
+            </div>
+            <button type="button" class="remove-rule-btn">&times;</button>
+        `;
+
+        ruleBuilder.appendChild(ruleDiv);
+
+        const opSelect = ruleDiv.querySelector('[name=op]');
+        const dynamicSegment = ruleDiv.querySelector('.rule-segment-dynamic');
+
+        const toggleDynamicSegment = () => {
+            dynamicSegment.style.display = opSelect.value === 'NONE' ? 'none' : 'flex';
+        }
+        opSelect.addEventListener('change', toggleDynamicSegment);
+        toggleDynamicSegment(); // Initial check
+
+        ruleDiv.querySelector('.remove-rule-btn').addEventListener('click', () => {
+            ruleDiv.remove();
+        });
+    }
+
+    addRuleBtn.addEventListener('click', () => createRuleElement());
+
+    form.addEventListener('submit', function(e) {
+        const rules = [];
+        document.querySelectorAll('.rule-item').forEach(ruleEl => {
+            rules.push({
+                var1: ruleEl.querySelector('[name=var1]').value,
+                set1: ruleEl.querySelector('[name=set1]').value,
+                op:   ruleEl.querySelector('[name=op]').value,
+                var2: ruleEl.querySelector('[name=var2]').value,
+                set2: ruleEl.querySelector('[name=set2]').value,
+                z:    ruleEl.querySelector('[name=z]').value
+            });
+        });
+        rulesJsonInput.value = JSON.stringify(rules);
+    });
+
+    try {
+        const oldRulesJson = '{{ form_data.rules_json | safe | default("[]", true) }}';
+        const oldRules = JSON.parse(oldRulesJson);
+        if (Array.isArray(oldRules)) {
+            oldRules.forEach(rule => createRuleElement(rule));
+        }
+    } catch (e) { 
+        console.error('Could not parse old rules:', e);
+    }
+
+    // Chart rendering logic
+    {% if calculation %}
+    (function() {
+        const isDarkMode = document.body.getAttribute('data-theme') !== 'light';
+        const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+        const textColor = isDarkMode ? '#e0e0e0' : '#333';
+
+        const createFuzzyChart = (canvasId, label, inputValue, poorValue, goodValue) => {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10'],
+                    datasets: [
+                        {
+                            label: 'Buruk',
+                            data: [{x:0, y:1}, {x:5, y:0}],
+                            borderColor: '#f44336',
+                            tension: 0.1,
+                            fill: false
+                        },
+                        {
+                            label: 'Baik',
+                            data: [{x:5, y:0}, {x:10, y:1}],
+                            borderColor: '#4caf50',
+                            tension: 0.1,
+                            fill: false
+                        },
+                        {
+                            label: 'Input (' + inputValue + ')',
+                            data: [{x: inputValue, y: 0}, {x: inputValue, y: 1}],
+                            borderColor: '#2196F3',
+                            borderDash: [5, 5],
+                            fill: false,
+                            pointRadius: 0
+                        },
+                         {
+                            label: 'μ(Buruk): ' + poorValue.toFixed(2),
+                            data: [{x: 0, y: poorValue}, {x: inputValue, y: poorValue}],
+                            borderColor: '#f44336',
+                            borderDash: [2, 2],
+                            pointBackgroundColor: '#f44336',
+                            pointRadius: 4,
+                            fill: false
+                        },
+                        {
+                            label: 'μ(Baik): ' + goodValue.toFixed(2),
+                            data: [{x: 0, y: goodValue}, {x: inputValue, y: goodValue}],
+                            borderColor: '#4caf50',
+                            borderDash: [2, 2],
+                            pointBackgroundColor: '#4caf50',
+                            pointRadius: 4,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            min: 0,
+                            max: 10,
+                            grid: { color: gridColor },
+                            ticks: { color: textColor }
+                        },
+                        y: {
+                            min: 0,
+                            max: 1,
+                            grid: { color: gridColor },
+                            ticks: { color: textColor }
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: textColor } },
+                        tooltip: { enabled: false }
+                    }
+                }
+            });
+        }
+
+        createFuzzyChart('serviceChart', 'Kualitas Pelayanan', {{ calculation.inputs.service }}, {{ calculation.fuzzification.service.poor }}, {{ calculation.fuzzification.service.good }});
+        createFuzzyChart('foodChart', 'Kualitas Makanan', {{ calculation.inputs.food }}, {{ calculation.fuzzification.food.poor }}, {{ calculation.fuzzification.food.good }});
+    })();
+    {% endif %}
+});
+</script>
+{% endblock %}

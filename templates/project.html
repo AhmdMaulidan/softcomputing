@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block title %}Daftar Project{% endblock %}
+
+{% block header %}Project{% endblock %}
+
+{% block content %}
+
+<div class="project-grid">
+    {% for project in projects %}
+    <div class="project-card">
+        <div class="card-image">
+            <img src="{{ url_for('static', filename=project.thumbnail) }}" alt="{{ project.title }}">
+        </div>
+        <div class="card-content">
+            <h3 class="card-title">{{ project.title }}</h3>
+            <p class="card-description">{{ project.description }}</p>
+            <div class="card-links">
+                <a href="{{ project.link_url }}" class="card-link">Lihat Project →</a>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <p>Belum ada project yang ditambahkan.</p>
+    {% endfor %}
+</div>
+
+{% endblock %}
