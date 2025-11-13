@@ -70,19 +70,22 @@
             <h2>Project</h2>
         </section>
         <div class="project-grid">
+            {% for project in projects %}
             <div class="project-card">
                 <div class="card-image">
-                    <img src="{{ url_for('static', filename='uploads/thumnail-fuzzy.png') }}" alt="Project Example">
+                    <img src="{{ url_for('static', filename=project.thumbnail) }}" alt="{{ project.title }}">
                 </div>
                 <div class="card-content">
-                    <h3 class="card-title">Kalkulator Fuzzy</h3>
-                    <p class="card-description">Project kalkulator logika fuzzy dengan metode Sugeno dan Mamdani.</p>
+                    <h3 class="card-title">{{ project.title }}</h3>
+                    <p class="card-description">{{ project.description }}</p>
                     <div class="card-links">
-                        <a href="{{ url_for('sugeno_calculator') }}" class="card-link">Coba Kalkulator →</a>
+                        <a href="{{ project.link_url }}" class="card-link">Lihat Project →</a>
                     </div>
                 </div>
             </div>
-            <!-- More project cards can be added here -->
+            {% else %}
+            <p>Belum ada project yang ditambahkan.</p>
+            {% endfor %}
         </div>
     </main>
 

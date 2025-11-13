@@ -39,7 +39,7 @@ PROJECTS = [
     {
         'id': 'knapsack-ga',
         'title': 'Algoritma Genetika Knapsack',
-        'thumbnail': '',  # Anda bisa menambahkan gambar thumbnail jika mau
+        'thumbnail': 'assets/thumnail-knapsack.png',
         'description': 'Menemukan solusi optimal untuk masalah Knapsack menggunakan Algoritma Genetika.',
         'endpoint': 'knapsack_calculator'
     }
@@ -50,7 +50,9 @@ PROJECTS = [
 @app.route('/')
 def index():
     tasks = Task.query.all()
-    return render_template('index.html', show_sidebar=False, tasks=tasks, active_nav='home')
+    for p in PROJECTS:
+        p['link_url'] = url_for(p['endpoint'])
+    return render_template('index.html', show_sidebar=False, tasks=tasks, projects=PROJECTS, active_nav='home')
 
 @app.route('/task/<int:task_id>')
 def task_detail(task_id):
