@@ -1,0 +1,198 @@
+{% extends 'base.html' %}
+
+{% block title %}Algoritma Genetika - Knapsack{% endblock %}
+
+{% block header %}Penyelesaian Masalah Knapsack dengan Algoritma Genetika{% endblock %}
+
+{% block content %}
+<style>
+    .knapsack-calculator-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+    }
+    .form-section, .results-section {
+        background: var(--card-bg);
+        padding: 1.5rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .items-list-container {
+        margin-top: 1rem;
+        max-height: 300px;
+        overflow-y: auto;
+        border: 1px solid var(--border-color);
+        padding: 1rem;
+        border-radius: 4px;
+    }
+    .item-row {
+        display: grid;
+        grid-template-columns: 3fr 2fr 2fr 1fr;
+        gap: 0.5rem;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+    .item-row input {
+        width: 100%;
+    }
+    .remove-item-btn {
+        background: #f44336;
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        cursor: pointer;
+        text-align: center;
+    }
+    .generation-log {
+        margin-top: 1rem;
+        max-height: 200px;
+        overflow-y: auto;
+        font-family: monospace;
+        font-size: 0.9em;
+        background: var(--code-bg);
+        padding: 0.5rem;
+        border-radius: 4px;
+    }
+</style>
+
+<div class="knapsack-calculator-layout">
+    <!-- Kolom Kiri: Input -->
+    <div class="form-section">
+        <h4>1. Konfigurasi Knapsack & Item</h4>
+        <form method="POST" id="knapsack-form" class="calculator-form-vertical" action="{{ url_for('knapsack_calculator') }}">
+            <div class="form-group">
+                <label for="max_weight">Kapasitas Maksimum Knapsack</label>
+                <input type="number" id="max_weight" name="max_weight" min="1" required value="{{ form_data.max_weight if form_data else '50' }}">
+            </div>
+            
+            <h5>Daftar Item:</h5>
+            <div id="items-list" class="items-list-container">
+                <!-- Item rows will be dynamically added here -->
+            </div>
+            <button type="button" id="add-item-btn" class="btn-secondary">+ Tambah Item</button>
+            <input type="hidden" name="items_json" id="items-json">
+            
+            <hr>
+            <button type="submit" class="calculate-btn btn-primary">Cari Solusi Optimal</button>
+        </form>
+    </div>
+
+    <!-- Kolom Kanan: Hasil -->
+    <div class="results-section">
+        <h4>2. Hasil Optimasi</h4>
+        {% if result %}
+            <div class="result-container">
+                <h5>Solusi Terbaik Ditemukan:</h5>
+                <p><strong>Total Nilai:</strong> {{ result.total_value }}</p>
+                <p><strong>Total Berat:</strong> {{ result.total_weight }} / {{ form_data.max_weight }}</p>
+            </div>
+            <div class="result-container">
+                <h5>Item yang Dipilih:</h5>
+                <ul>
+                    {% for item in result.selected_items %}
+                        <li>{{ item.name }} (Berat: {{ item.weight }}, Nilai: {{ item.value }})</li>
+                    {% else %}
+                        <li>Tidak ada item yang dipilih.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="result-container">
+                <h5>Log Evolusi ({{ result.generation_log|length }} Generasi):</h5>
+                <div class="generation-log">
+                    {% for log in result.generation_log %}
+                        <div>Gen {{ log.generation }}: Fitness Terbaik = {{ '%.2f'|format(log.best_fitness) }}, Rata-rata = {{ '%.2f'|format(log.average_fitness) }}</div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% elif request.method == 'POST' %}
+            <div class="info-container">
+                 <h4>Tidak Ada Solusi</h4>
+                 <p>Algoritma tidak dapat menemukan solusi. Pastikan Anda telah menambahkan item dan kapasitas knapsack yang valid.</p>
+            </div>
+        {% else %}
+            <div class="info-container">
+                <p>Masukkan kapasitas knapsack dan tambahkan item-item yang tersedia, lalu klik "Cari Solusi Optimal" untuk memulai proses.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const itemsList = document.getElementById('items-list');
+    const addItemBtn = document.getElementById('add-item-btn');
+    const form = document.getElementById('knapsack-form');
+    const itemsJsonInput = document.getElementById('items-json');
+    let itemCounter = 0;
+
+    // Fungsi untuk menambah baris item baru
+    function createItemRow(item = {}) {
+        const itemId = itemCounter++;
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'item-row';
+        itemDiv.id = `item-${itemId}`;
+
+        itemDiv.innerHTML = `
+            <input type="text" name="item_name" placeholder="Nama Item" required value="${item.name || ''}">
+            <input type="number" name="item_weight" placeholder="Berat" min="0.1" step="any" required value="${item.weight || ''}">
+            <input type="number" name="item_value" placeholder="Nilai" min="0" step="any" required value="${item.value || ''}">
+            <button type="button" class="remove-item-btn">&times;</button>
+        `;
+        itemsList.appendChild(itemDiv);
+
+        itemDiv.querySelector('.remove-item-btn').addEventListener('click', () => {
+            itemDiv.remove();
+        });
+    }
+
+    // Tambahkan item awal untuk contoh
+    function addInitialItems() {
+        const initialItems = [
+            { name: 'Laptop', weight: 3, value: 2500 },
+            { name: 'Buku', weight: 1, value: 300 },
+            { name: 'Botol Minum', weight: 0.5, value: 70 },
+            { name: 'Headphone', weight: 0.4, value: 150 },
+            { name: 'Kamera', weight: 2, value: 2000 },
+            { name: 'Charger', weight: 0.2, value: 100 },
+            { name: 'Baju', weight: 0.8, value: 120 }
+        ];
+        
+        // Cek apakah ada data lama dari form, jika tidak, gunakan data awal
+        try {
+            const oldItemsJson = '{{ form_data.items_json | safe | default("[]", true) }}';
+            const oldItems = JSON.parse(oldItemsJson);
+            if (Array.isArray(oldItems) && oldItems.length > 0) {
+                oldItems.forEach(item => createItemRow(item));
+            } else {
+                initialItems.forEach(item => createItemRow(item));
+            }
+        } catch (e) {
+            console.error('Could not parse old items JSON, using default.', e);
+            initialItems.forEach(item => createItemRow(item));
+        }
+    }
+
+    // Event listener untuk tombol tambah item
+    addItemBtn.addEventListener('click', () => createItemRow());
+
+    // Serialisasi data item ke JSON sebelum form di-submit
+    form.addEventListener('submit', function(e) {
+        const items = [];
+        document.querySelectorAll('.item-row').forEach(row => {
+            const name = row.querySelector('[name=item_name]').value;
+            const weight = row.querySelector('[name=item_weight]').value;
+            const value = row.querySelector('[name=item_value]').value;
+            if (name && weight && value) {
+                items.push({ name, weight: parseFloat(weight), value: parseInt(value) });
+            }
+        });
+        itemsJsonInput.value = JSON.stringify(items);
+    });
+
+    // Panggil fungsi untuk mengisi item awal saat halaman dimuat
+    addInitialItems();
+});
+</script>
+{% endblock %}
