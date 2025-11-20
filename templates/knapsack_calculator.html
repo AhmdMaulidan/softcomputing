@@ -17,8 +17,18 @@
         border-radius: 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
+    .item-row-header {
+        display: grid;
+        grid-template-columns: 3fr 2fr 2fr 1fr;
+        gap: 0.5rem;
+        padding: 0 1rem;
+        font-weight: bold;
+        color: var(--text-secondary);
+        font-size: 0.9em;
+        margin-bottom: 0.5rem;
+    }
     .items-list-container {
-        margin-top: 1rem;
+        margin-top: 0.5rem;
         max-height: 300px;
         overflow-y: auto;
         border: 1px solid var(--border-color);
@@ -76,6 +86,12 @@
             </div>
             
             <h5>Daftar Item:</h5>
+            <div class="item-row-header">
+                <div>Nama</div>
+                <div>Berat</div>
+                <div>Nilai</div>
+                <div></div>
+            </div>
             <div id="items-list" class="items-list-container">
                 <!-- Item rows will be dynamically added here -->
             </div>
@@ -145,9 +161,9 @@ document.addEventListener('DOMContentLoaded', function() {
         itemDiv.id = `item-${itemId}`;
 
         itemDiv.innerHTML = `
-            <input type="text" name="item_name" placeholder="Nama Item" required value="${item.name || ''}">
-            <input type="number" name="item_weight" placeholder="Berat" min="0.1" step="any" required value="${item.weight || ''}">
-            <input type="number" name="item_value" placeholder="Nilai" min="0" step="any" required value="${item.value || ''}">
+            <input type="text" name="item_name" placeholder="" required value="${item.name || ''}">
+            <input type="number" name="item_weight" placeholder="" min="0.1" step="any" required value="${item.weight || ''}">
+            <input type="number" name="item_value" placeholder="" min="0" step="any" required value="${item.value || ''}">
             <button type="button" class="remove-item-btn">&times;</button>
         `;
         itemsList.appendChild(itemDiv);

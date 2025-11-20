@@ -4,6 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 import json
 import genetic_knapsack
+import genetic_tsp
 
 app = Flask(__name__)
 
@@ -39,9 +40,16 @@ PROJECTS = [
     {
         'id': 'knapsack-ga',
         'title': 'Algoritma Genetika Knapsack',
-        'thumbnail': '',  # Anda bisa menambahkan gambar thumbnail jika mau
+        'thumbnail': 'assets/thumnail-knapsack.png',
         'description': 'Menemukan solusi optimal untuk masalah Knapsack menggunakan Algoritma Genetika.',
         'endpoint': 'knapsack_calculator'
+    },
+    {
+        'id': 'tsp-ga',
+        'title': 'TSP dengan Algoritma Genetika',
+        'thumbnail': 'assets/thumnail-tsp-genetika.png',
+        'description': 'Menyelesaikan Traveling Salesperson Problem (TSP) menggunakan Algoritma Genetika.',
+        'endpoint': 'tsp_calculator'
     }
 ]
 
@@ -50,7 +58,9 @@ PROJECTS = [
 @app.route('/')
 def index():
     tasks = Task.query.all()
-    return render_template('index.html', show_sidebar=False, tasks=tasks, active_nav='home')
+    for p in PROJECTS:
+        p['link_url'] = url_for(p['endpoint'])
+    return render_template('index.html', show_sidebar=False, tasks=tasks, projects=PROJECTS, active_nav='home')
 
 @app.route('/task/<int:task_id>')
 def task_detail(task_id):
@@ -75,6 +85,62 @@ def project():
         p['link_url'] = url_for(p['endpoint'])
     return render_template('project.html', show_sidebar=True, projects=PROJECTS,
                            sidebar_items=PROJECTS, sidebar_title='Project', active_nav='project')
+
+@app.route('/tsp_calculator', methods=['GET', 'POST'])
+def tsp_calculator():
+    result = None
+    error = None
+    form_data = request.form
+
+    if request.method == 'POST':
+        try:
+            # Get parameters from form
+            dist_matrix_json = form_data.get('dist_matrix_json')
+            city_names_str = form_data.get('city_names')
+            pop_size = int(form_data.get('pop_size', 250))
+            generations = int(form_data.get('generations', 200))
+            pc = float(form_data.get('pc', 0.8))
+            pm = float(form_data.get('pm', 0.2))
+            tournament_k = int(form_data.get('tournament_k', 5))
+            elite_size = int(form_data.get('elite_size', 1))
+
+            # Validate and parse inputs
+            if not dist_matrix_json or not city_names_str:
+                raise ValueError("Distance matrix and city names are required.")
+
+            dist_matrix = json.loads(dist_matrix_json)
+            # FIX: Filter out empty strings from city names that result from trailing commas
+            city_names = [name.strip() for name in city_names_str.split(',') if name.strip()]
+
+            if len(dist_matrix) != len(city_names):
+                raise ValueError(f"The number of city names ({len(city_names)}) must match the dimension of the distance matrix ({len(dist_matrix)}).")
+
+            # Call the solver
+            solution = genetic_tsp.solve_tsp(
+                dist_matrix, pop_size, generations, tournament_k, pc, pm, elite_size
+            )
+
+            # Prepare result for rendering
+            best_route_named = [city_names[i] for i in solution['best_route']]
+            result = {
+                'best_route_named': best_route_named,
+                'best_distance': solution['best_distance'],
+                'history': solution['history']
+            }
+
+        except (ValueError, KeyError, json.JSONDecodeError) as e:
+            error = f"Invalid input or format error. Please check your inputs. Details: {e}"
+        except Exception as e:
+            error = f"An unexpected error occurred: {e}"
+
+    # Prepare sidebar links
+    for p in PROJECTS:
+        p['link_url'] = url_for(p['endpoint'])
+        
+    return render_template('tsp_calculator.html', show_sidebar=True, 
+                           sidebar_items=PROJECTS, sidebar_title='Project', 
+                           active_nav='project', result=result, error=error, 
+                           form_data=form_data)
 
 @app.route('/knapsack_calculator', methods=['GET', 'POST'])
 def knapsack_calculator():
@@ -187,18 +253,74 @@ def sugeno_calculator():
 
 @app.route('/new', methods=['GET', 'POST'])
 def new_task():
-    # ... (rest of the function is unchanged)
-    pass
+    if request.method == 'POST':
+        title = request.form['title']
+        description = request.form.get('description', '')
+        content = request.form['content']
+        
+        thumbnail_filename = None
+        if 'thumbnail' in request.files:
+            thumbnail_file = request.files['thumbnail']
+            if thumbnail_file.filename != '':
+                filename = secure_filename(thumbnail_file.filename)
+                save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                thumbnail_file.save(save_path)
+                thumbnail_filename = os.path.join('uploads', filename)
+
+        new_task = Task(
+            title=title, 
+            description=description, 
+            content=content, 
+            thumbnail=thumbnail_filename
+        )
+        
+        db.session.add(new_task)
+        db.session.commit()
+        
+        flash('Materi baru berhasil ditambahkan!', 'success')
+        return redirect(url_for('task_detail', task_id=new_task.id))
+        
+    tasks = Task.query.all()
+    for t in tasks:
+        t.link_url = url_for('task_detail', task_id=t.id)
+    return render_template('new_task.html', show_sidebar=True, 
+                           sidebar_items=tasks, sidebar_title='Tugas Materi', 
+                           active_nav='tugas')
 
 @app.route('/edit/<int:task_id>', methods=['GET', 'POST'])
 def edit_task(task_id):
-    # ... (rest of the function is unchanged)
-    pass
+    task = Task.query.get_or_404(task_id)
+    if request.method == 'POST':
+        task.title = request.form['title']
+        task.description = request.form.get('description', '')
+        task.content = request.form['content']
+
+        if 'thumbnail' in request.files:
+            thumbnail_file = request.files['thumbnail']
+            if thumbnail_file.filename != '':
+                filename = secure_filename(thumbnail_file.filename)
+                save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                thumbnail_file.save(save_path)
+                task.thumbnail = os.path.join('uploads', filename)
+
+        db.session.commit()
+        flash('Materi berhasil diperbarui!', 'success')
+        return redirect(url_for('task_detail', task_id=task.id))
+
+    tasks = Task.query.all()
+    for t in tasks:
+        t.link_url = url_for('task_detail', task_id=t.id)
+    return render_template('edit_task.html', task=task, show_sidebar=True, 
+                           sidebar_items=tasks, sidebar_title='Tugas Materi', 
+                           active_nav='tugas')
 
 @app.route('/delete/<int:task_id>', methods=['POST'])
 def delete_task(task_id):
-    # ... (rest of the function is unchanged)
-    pass
+    task = Task.query.get_or_404(task_id)
+    db.session.delete(task)
+    db.session.commit()
+    flash('Materi berhasil dihapus.', 'success')
+    return redirect(url_for('tugas'))
 
 with app.app_context():
     db.create_all()
