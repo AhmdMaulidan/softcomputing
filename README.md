@@ -1,6 +1,7 @@
 # Showcase Aplikasi Soft Computing
 
 Selamat datang di repositori Showcase Aplikasi Soft Computing! Proyek ini adalah aplikasi web yang dibangun menggunakan **Flask** (framework Python) untuk mendemonstrasikan beberapa konsep dan algoritma dari bidang *soft computing* secara interaktif.
+![image alt](https://github.com/AhmdMaulidan/Filter-Citra/blob/433a319ef0202481f67581fcded94ff3a3ea88f8/contoh%20image.png)
 
 ## 🌟 Fitur Utama
 
